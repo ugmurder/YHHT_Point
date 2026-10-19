@@ -1,0 +1,708 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>打点计算 · AZ/EL 自动生成</title>
+<style>
+  :root {
+    --bg: #f4f6fa;
+    --card: #ffffff;
+    --border: #e3e8f0;
+    --text: #1f2937;
+    --muted: #6b7280;
+    --accent: #2563eb;
+    --accent-soft: #eff6ff;
+    --teal: #0d9488;
+    --teal-soft: #f0fdfa;
+    --danger: #dc2626;
+    --shadow: 0 1px 3px rgba(16, 24, 40, .06), 0 1px 2px rgba(16, 24, 40, .04);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", "Helvetica Neue", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    padding: 28px 16px 56px;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1060px; margin: 0 auto; }
+
+  header { text-align: center; margin-bottom: 22px; }
+  header h1 { font-size: 24px; font-weight: 700; letter-spacing: .5px; }
+  header p { color: var(--muted); font-size: 13px; margin-top: 6px; }
+  header p b { color: var(--accent); font-weight: 600; }
+
+  /* Tabs */
+  .tabs {
+    display: flex; justify-content: center; gap: 8px;
+    background: #e9edf5; padding: 5px; border-radius: 12px;
+    width: fit-content; margin: 0 auto 20px;
+  }
+  .tab {
+    border: none; background: transparent; cursor: pointer;
+    padding: 9px 26px; border-radius: 9px; font-size: 14.5px;
+    color: var(--muted); font-weight: 600; transition: all .18s;
+    font-family: inherit;
+  }
+  .tab:hover { color: var(--text); }
+  .tab.active { background: var(--card); color: var(--accent); box-shadow: var(--shadow); }
+
+  /* Layout */
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  @media (max-width: 860px) { .grid { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 14px; box-shadow: var(--shadow); padding: 20px 22px;
+  }
+  .card h2 {
+    font-size: 15px; font-weight: 700; margin-bottom: 14px;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .card h2 .unit { font-size: 12px; color: var(--muted); font-weight: 500; }
+
+  /* Diagram + inputs */
+  .diagram { display: flex; justify-content: center; margin-bottom: 10px; }
+  .diagram svg { max-width: 100%; height: auto; }
+
+  .pt-grid { display: grid; gap: 10px; margin-bottom: 14px; }
+  .pt-grid.rect { grid-template-columns: 1fr 1fr; }
+  .pt-grid.cross { grid-template-columns: 1fr 1fr 1fr; }
+  .pt-grid.cross .empty { visibility: hidden; }
+  .pt-grid.cross .center {
+    display: flex; align-items: center; justify-content: center;
+    color: #c3cad6; font-size: 20px;
+  }
+  .pt label {
+    display: block; font-size: 12.5px; color: var(--muted); margin-bottom: 5px;
+    font-weight: 600;
+  }
+  .pt label b { color: var(--text); font-size: 13.5px; }
+  .pt label .pos { color: var(--accent); font-weight: 600; margin-left: 4px; }
+  .pt input {
+    width: 100%; padding: 9px 11px; font-size: 15px;
+    border: 1.5px solid var(--border); border-radius: 9px;
+    outline: none; transition: border-color .15s, box-shadow .15s;
+    font-family: inherit; background: #fbfcfe; color: var(--text);
+  }
+  .pt input:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, .12);
+    background: #fff;
+  }
+  .pt input.invalid { border-color: var(--danger); }
+
+  .dist-row { display: flex; gap: 12px; }
+  .dist-row .pt { flex: 1; }
+
+  .actions { display: flex; gap: 10px; margin-top: 16px; flex-wrap: wrap; }
+  .btn {
+    border: 1px solid var(--border); background: #fff; color: var(--text);
+    padding: 8px 16px; border-radius: 9px; font-size: 13.5px; cursor: pointer;
+    transition: all .15s; font-family: inherit; font-weight: 500;
+  }
+  .btn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn.primary:hover { background: #1d4ed8; color: #fff; }
+  .btn.danger:hover { border-color: var(--danger); color: var(--danger); background: #fef2f2; }
+
+  /* Results */
+  .result-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; }
+  .res {
+    border-radius: 12px; padding: 16px 18px; text-align: center;
+  }
+  .res.az { background: var(--accent-soft); border: 1px solid #dbeafe; }
+  .res.el { background: var(--teal-soft); border: 1px solid #ccfbf1; }
+  .res .name { font-size: 13px; color: var(--muted); font-weight: 600; margin-bottom: 6px; }
+  .res .name b { font-size: 16px; }
+  .res.az .name b { color: var(--accent); }
+  .res.el .name b { color: var(--teal); }
+  .res .val {
+    font-size: 30px; font-weight: 700; font-variant-numeric: tabular-nums;
+    letter-spacing: .3px;
+  }
+  .res.az .val { color: var(--accent); }
+  .res.el .val { color: var(--teal); }
+  .res .val small { font-size: 16px; font-weight: 600; margin-left: 2px; }
+  .res .val.empty { color: #9ca3af; font-size: 20px; font-weight: 500; }
+  .res .err { color: var(--danger); font-size: 12px; margin-top: 4px; min-height: 16px; }
+
+  .sec-title {
+    font-size: 12.5px; color: var(--muted); font-weight: 700;
+    margin: 14px 0 8px; text-transform: uppercase; letter-spacing: .6px;
+  }
+  .mid-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .mid {
+    display: flex; justify-content: space-between; align-items: center;
+    background: #f8fafc; border: 1px solid var(--border);
+    border-radius: 8px; padding: 8px 12px; font-size: 13px;
+  }
+  .mid .k { color: var(--muted); }
+  .mid .v { font-weight: 600; font-variant-numeric: tabular-nums; }
+
+  .formula {
+    background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 8px;
+    padding: 10px 14px; font-size: 12.5px; color: #475569; line-height: 1.9;
+    font-variant-numeric: tabular-nums;
+  }
+  .formula .f-az { color: var(--accent); font-weight: 600; }
+  .formula .f-el { color: var(--teal); font-weight: 600; }
+
+  /* History */
+  .history { margin-top: 18px; }
+  .history .head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+  .history h2 { font-size: 15px; font-weight: 700; }
+  .history .head .btns { display: flex; gap: 8px; }
+  .table-wrap {
+    background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+    box-shadow: var(--shadow); overflow-x: auto;
+  }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 760px; }
+  th, td { padding: 10px 12px; text-align: right; white-space: nowrap; }
+  th {
+    background: #f8fafc; color: var(--muted); font-weight: 600; font-size: 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  th:first-child, td:first-child { text-align: left; }
+  td { border-bottom: 1px solid #f1f5f9; font-variant-numeric: tabular-nums; }
+  tr:last-child td { border-bottom: none; }
+  td.azv { color: var(--accent); font-weight: 600; }
+  td.elv { color: var(--teal); font-weight: 600; }
+  .tag {
+    display: inline-block; padding: 2px 8px; border-radius: 20px;
+    font-size: 11.5px; font-weight: 600;
+  }
+  .tag.rect { background: var(--accent-soft); color: var(--accent); }
+  .tag.cross { background: var(--teal-soft); color: var(--teal); }
+  .empty-history {
+    text-align: center; color: var(--muted); font-size: 13px; padding: 26px;
+  }
+  .del-btn {
+    border: none; background: transparent; color: #94a3b8; cursor: pointer;
+    font-size: 14px; padding: 2px 6px; border-radius: 5px; font-family: inherit;
+  }
+  .del-btn:hover { color: var(--danger); background: #fef2f2; }
+
+  /* Toast */
+  #toast {
+    position: fixed; left: 50%; bottom: 34px; transform: translateX(-50%) translateY(20px);
+    background: #111827; color: #fff; padding: 10px 22px; border-radius: 10px;
+    font-size: 13.5px; opacity: 0; pointer-events: none;
+    transition: all .25s; box-shadow: 0 8px 24px rgba(0,0,0,.18); z-index: 99;
+  }
+  #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  footer { text-align: center; color: #9ca3af; font-size: 12px; margin-top: 26px; line-height: 1.8; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>打点计算 · AZ / EL 自动生成</h1>
+    <p>输入四个点位读数，实时计算方位角 <b>AZ</b> 与俯仰角 <b>EL</b>（公式取自《打点计算.xlsx》）</p>
+  </header>
+
+  <div class="tabs">
+    <button class="tab active" data-mode="rect" id="tab-rect">矩形点位分布</button>
+    <button class="tab" data-mode="cross" id="tab-cross">十字分布</button>
+  </div>
+
+  <div class="grid">
+    <!-- 输入面板 -->
+    <div class="card">
+      <h2>点位输入 <span class="unit">单位：mm</span></h2>
+
+      <!-- 矩形示意图 -->
+      <div class="diagram" id="diagram-rect">
+        <svg width="270" height="196" viewBox="0 0 270 196">
+          <rect x="55" y="30" width="160" height="120" rx="6" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.5"/>
+          <!-- P3 左上 -->
+          <circle cx="55" cy="30" r="6" fill="#2563eb"/>
+          <text x="38" y="22" font-size="12" font-weight="700" fill="#2563eb">P3</text>
+          <text x="60" y="22" font-size="10.5" fill="#6b7280">左上</text>
+          <!-- P2 右上 -->
+          <circle cx="215" cy="30" r="6" fill="#2563eb"/>
+          <text x="226" y="22" font-size="12" font-weight="700" fill="#2563eb">P2</text>
+          <text x="226" y="36" font-size="10.5" fill="#6b7280">右上</text>
+          <!-- P4 左下 -->
+          <circle cx="55" cy="150" r="6" fill="#2563eb"/>
+          <text x="24" y="155" font-size="12" font-weight="700" fill="#2563eb">P4</text>
+          <text x="24" y="169" font-size="10.5" fill="#6b7280">左下</text>
+          <!-- P1 右下 -->
+          <circle cx="215" cy="150" r="6" fill="#2563eb"/>
+          <text x="226" y="155" font-size="12" font-weight="700" fill="#2563eb">P1</text>
+          <text x="226" y="169" font-size="10.5" fill="#6b7280">右下</text>
+          <!-- 距离标注 -->
+          <line x1="55" y1="176" x2="215" y2="176" stroke="#94a3b8" stroke-width="1" marker-end="url(#arr)" marker-start="url(#arr2)"/>
+          <text x="135" y="190" font-size="10.5" fill="#6b7280" text-anchor="middle">水平距离</text>
+          <line x1="238" y1="30" x2="238" y2="150" stroke="#94a3b8" stroke-width="1" marker-end="url(#arr)" marker-start="url(#arr2)"/>
+          <text x="252" y="94" font-size="10.5" fill="#6b7280">垂直</text>
+          <defs>
+            <marker id="arr" markerWidth="7" markerHeight="7" refX="5" refY="3.5" orient="auto"><path d="M0,0 L6,3.5 L0,7 Z" fill="#94a3b8"/></marker>
+            <marker id="arr2" markerWidth="7" markerHeight="7" refX="1" refY="3.5" orient="auto"><path d="M6,0 L0,3.5 L6,7 Z" fill="#94a3b8"/></marker>
+          </defs>
+        </svg>
+      </div>
+
+      <!-- 十字示意图 -->
+      <div class="diagram" id="diagram-cross" style="display:none">
+        <svg width="270" height="196" viewBox="0 0 270 196">
+          <line x1="135" y1="30" x2="135" y2="166" stroke="#cbd5e1" stroke-width="1.2"/>
+          <line x1="52" y1="98" x2="218" y2="98" stroke="#cbd5e1" stroke-width="1.2"/>
+          <!-- P2 上 -->
+          <circle cx="135" cy="30" r="6" fill="#0d9488"/>
+          <text x="146" y="26" font-size="12" font-weight="700" fill="#0d9488">P2</text>
+          <text x="146" y="40" font-size="10.5" fill="#6b7280">上</text>
+          <!-- P1 右 -->
+          <circle cx="218" cy="98" r="6" fill="#0d9488"/>
+          <text x="200" y="88" font-size="12" font-weight="700" fill="#0d9488">P1</text>
+          <text x="200" y="102" font-size="10.5" fill="#6b7280">右</text>
+          <!-- P3 左 -->
+          <circle cx="52" cy="98" r="6" fill="#0d9488"/>
+          <text x="63" y="88" font-size="12" font-weight="700" fill="#0d9488">P3</text>
+          <text x="63" y="102" font-size="10.5" fill="#6b7280">左</text>
+          <!-- P4 下 -->
+          <circle cx="135" cy="166" r="6" fill="#0d9488"/>
+          <text x="146" y="163" font-size="12" font-weight="700" fill="#0d9488">P4</text>
+          <text x="146" y="177" font-size="10.5" fill="#6b7280">下</text>
+          <!-- 距离标注 -->
+          <text x="135" y="190" font-size="10.5" fill="#6b7280" text-anchor="middle">水平距离（P1↔P3）　垂直距离（P2↔P4）</text>
+        </svg>
+      </div>
+
+      <!-- 矩形输入：按空间位置排布 -->
+      <div class="pt-grid rect" id="inputs-rect">
+        <div class="pt"><label><b>P3</b><span class="pos">左上</span></label><input type="number" step="0.001" id="r-p3" placeholder="0.000"></div>
+        <div class="pt"><label><b>P2</b><span class="pos">右上</span></label><input type="number" step="0.001" id="r-p2" placeholder="0.000"></div>
+        <div class="pt"><label><b>P4</b><span class="pos">左下</span></label><input type="number" step="0.001" id="r-p4" placeholder="0.000"></div>
+        <div class="pt"><label><b>P1</b><span class="pos">右下</span></label><input type="number" step="0.001" id="r-p1" placeholder="0.000"></div>
+      </div>
+
+      <!-- 十字输入：按空间位置排布 -->
+      <div class="pt-grid cross" id="inputs-cross" style="display:none">
+        <div class="empty"></div>
+        <div class="pt"><label><b>P2</b><span class="pos">上</span></label><input type="number" step="0.001" id="c-p2" placeholder="0.000"></div>
+        <div class="empty"></div>
+        <div class="pt"><label><b>P3</b><span class="pos">左</span></label><input type="number" step="0.001" id="c-p3" placeholder="0.000"></div>
+        <div class="center">＋</div>
+        <div class="pt"><label><b>P1</b><span class="pos">右</span></label><input type="number" step="0.001" id="c-p1" placeholder="0.000"></div>
+        <div class="empty"></div>
+        <div class="pt"><label><b>P4</b><span class="pos">下</span></label><input type="number" step="0.001" id="c-p4" placeholder="0.000"></div>
+        <div class="empty"></div>
+      </div>
+
+      <div class="dist-row">
+        <div class="pt"><label>水平距离 (mm)</label><input type="number" step="1" id="dist-h"></div>
+        <div class="pt"><label>垂直距离 (mm)</label><input type="number" step="1" id="dist-v"></div>
+      </div>
+
+      <div class="actions">
+        <button class="btn" id="btn-sample">填入 Excel 示例数据</button>
+        <button class="btn" id="btn-clear">清空输入</button>
+      </div>
+    </div>
+
+    <!-- 结果面板 -->
+    <div class="card">
+      <h2>计算结果 <span class="unit">单位：度 (°)</span></h2>
+      <div class="result-cards">
+        <div class="res az">
+          <div class="name"><b>AZ</b> 方位角</div>
+          <div class="val" id="az-val">—</div>
+          <div class="err" id="az-err"></div>
+        </div>
+        <div class="res el">
+          <div class="name"><b>EL</b> 俯仰角</div>
+          <div class="val" id="el-val">—</div>
+          <div class="err" id="el-err"></div>
+        </div>
+      </div>
+
+      <div class="sec-title">中间量 (mm)</div>
+      <div class="mid-grid" id="mid-grid"></div>
+
+      <div class="sec-title">计算公式</div>
+      <div class="formula" id="formula-box"></div>
+
+      <div class="actions">
+        <button class="btn primary" id="btn-save">保存本次记录</button>
+        <button class="btn" id="btn-copy">复制结果</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 历史记录 -->
+  <div class="history">
+    <div class="head">
+      <h2>历史记录</h2>
+      <div class="btns">
+        <button class="btn" id="btn-export">导出 CSV</button>
+        <button class="btn danger" id="btn-clear-history">清空历史</button>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table id="history-table">
+        <thead>
+          <tr>
+            <th>时间</th><th>模式</th><th>P1</th><th>P2</th><th>P3</th><th>P4</th>
+            <th>水平距离</th><th>垂直距离</th><th>AZ (°)</th><th>EL (°)</th><th></th>
+          </tr>
+        </thead>
+        <tbody id="history-body"></tbody>
+      </table>
+      <div class="empty-history" id="history-empty">暂无记录，输入点位后点击「保存本次记录」。</div>
+    </div>
+  </div>
+
+  <footer>
+    公式与《打点计算.xlsx》完全一致（π=3.1415926）：<br>
+    矩形 AZ=ATAN[(P1+P2)/2−(P3+P4)/2]÷水平距离÷π×180，EL=ATAN[(P1+P4)/2−(P2+P3)/2]÷垂直距离÷π×180<br>
+    十字 AZ=ATAN[(P1−P3)÷水平距离]÷π×180，EL=ATAN[(P2−P4)÷垂直距离]÷π×180
+  </footer>
+</div>
+
+<div id="toast"></div>
+
+<script>
+(function () {
+  'use strict';
+
+  var MODE_KEY = 'dadian_inputs_v1';
+  var HIST_KEY = 'dadian_history_v1';
+
+  // Excel 中的示例数据（用于核对）
+  var SAMPLES = {
+    rect: { p1: 0, p2: -0.075, p3: -0.318, p4: -0.197, h: 130, v: 160 },
+    cross: { p1: 0, p2: 0.013, p3: -0.127, p4: -0.117, h: 800, v: 800 }
+  };
+
+  var state = {
+    mode: 'rect',
+    rect: { p1: '', p2: '', p3: '', p4: '', h: '130', v: '160' },
+    cross: { p1: '', p2: '', p3: '', p4: '', h: '800', v: '800' }
+  };
+  var history = [];
+
+  // ---------- 工具 ----------
+  function $(id) { return document.getElementById(id); }
+
+  function loadStore() {
+    try {
+      var s = JSON.parse(localStorage.getItem(MODE_KEY) || 'null');
+      if (s && s.rect && s.cross && s.mode) {
+        state.mode = s.mode === 'cross' ? 'cross' : 'rect';
+        ['rect', 'cross'].forEach(function (m) {
+          ['p1', 'p2', 'p3', 'p4', 'h', 'v'].forEach(function (k) {
+            if (s[m][k] !== undefined && s[m][k] !== null) state[m][k] = String(s[m][k]);
+          });
+        });
+      }
+      history = JSON.parse(localStorage.getItem(HIST_KEY) || '[]');
+      if (!Array.isArray(history)) history = [];
+    } catch (e) { /* 忽略损坏的本地数据 */ }
+  }
+
+  function saveStore() {
+    try {
+      localStorage.setItem(MODE_KEY, JSON.stringify(state));
+    } catch (e) { /* ignore */ }
+  }
+
+  function saveHistory() {
+    try { localStorage.setItem(HIST_KEY, JSON.stringify(history)); } catch (e) { /* ignore */ }
+  }
+
+  function fmt(n, d) {
+    if (n === null || n === undefined || isNaN(n)) return '—';
+    return Number(n).toFixed(d === undefined ? 3 : d);
+  }
+
+  function toast(msg) {
+    var t = $('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    clearTimeout(t._timer);
+    t._timer = setTimeout(function () { t.classList.remove('show'); }, 1800);
+  }
+
+  function copyText(text) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      return navigator.clipboard.writeText(text).catch(function () { return fallbackCopy(text); });
+    }
+    return Promise.resolve(fallbackCopy(text));
+  }
+  function fallbackCopy(text) {
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand('copy'); } catch (e) { /* ignore */ }
+    document.body.removeChild(ta);
+  }
+
+  // ---------- 计算 ----------
+  // 严格按《打点计算.xlsx》原公式复现（π 取 3.1415926，与 Excel 一致）
+  // 矩形：P1 右下, P2 右上, P3 左上, P4 左下
+  //   AZ = ATAN((P1+P2)/2-(P3+P4)/2) / 水平距离 / π × 180   ← 除以距离在 ATAN 之外（Excel 原样）
+  //   EL = ATAN((P1+P4)/2-(P2+P3)/2) / 垂直距离 / π × 180
+  // 十字：P1 右, P2 上, P3 左, P4 下
+  //   AZ = ATAN((P1-P3) / 水平距离) / π × 180               ← 除以距离在 ATAN 之内（Excel 原样）
+  //   EL = ATAN((P2-P4) / 垂直距离) / π × 180
+  var PI_EXCEL = 3.1415926;
+  function calc(mode, p) {
+    var H = p.h, V = p.v;
+    if (isNaN(H) || isNaN(V) || H === 0 || V === 0) return { error: '水平/垂直距离不能为 0 或空' };
+    var dh, dv, mid, az, el;
+    if (mode === 'rect') {
+      var right = (p.p1 + p.p2) / 2;   // 右侧均值
+      var left = (p.p3 + p.p4) / 2;    // 左侧均值
+      var bottom = (p.p1 + p.p4) / 2;  // 下侧均值
+      var top = (p.p2 + p.p3) / 2;     // 上侧均值
+      dh = right - left;
+      dv = bottom - top;
+      mid = { '右侧均值 (P1+P2)/2': right, '左侧均值 (P3+P4)/2': left, '水平差值 ΔH': dh, '下侧均值 (P1+P4)/2': bottom, '上侧均值 (P2+P3)/2': top, '垂直差值 ΔV': dv };
+      az = Math.atan(dh) / H / PI_EXCEL * 180;
+      el = Math.atan(dv) / V / PI_EXCEL * 180;
+    } else {
+      dh = p.p1 - p.p3;
+      dv = p.p2 - p.p4;
+      mid = { '水平差值 P1−P3': dh, '垂直差值 P2−P4': dv };
+      az = Math.atan(dh / H) / PI_EXCEL * 180;
+      el = Math.atan(dv / V) / PI_EXCEL * 180;
+    }
+    return { az: az, el: el, dh: dh, dv: dv, mid: mid };
+  }
+
+  // ---------- 渲染 ----------
+  var INPUT_IDS = {
+    rect: { p1: 'r-p1', p2: 'r-p2', p3: 'r-p3', p4: 'r-p4' },
+    cross: { p1: 'c-p1', p2: 'c-p2', p3: 'c-p3', p4: 'c-p4' }
+  };
+
+  function readInputs() {
+    var m = state.mode, ids = INPUT_IDS[m];
+    var p = {};
+    ['p1', 'p2', 'p3', 'p4'].forEach(function (k) {
+      var el = $(ids[k]);
+      var v = el.value.trim();
+      state[m][k] = v;
+      p[k] = v === '' ? NaN : parseFloat(v);
+      el.classList.toggle('invalid', v !== '' && isNaN(p[k]));
+    });
+    p.h = parseFloat($('dist-h').value);
+    p.v = parseFloat($('dist-v').value);
+    state[m].h = $('dist-h').value;
+    state[m].v = $('dist-v').value;
+    return p;
+  }
+
+  function render() {
+    var m = state.mode;
+    var p = readInputs();
+    var complete = ['p1', 'p2', 'p3', 'p4'].every(function (k) { return !isNaN(p[k]); });
+
+    var azEl = $('az-val'), elEl = $('el-val');
+    var azErr = $('az-err'), elErr = $('el-err');
+    azErr.textContent = ''; elErr.textContent = '';
+
+    if (!complete) {
+      azEl.textContent = '—'; elEl.textContent = '—';
+      azEl.className = 'val empty'; elEl.className = 'val empty';
+      $('mid-grid').innerHTML = '<div class="mid"><span class="k">请输入完整的四个点位</span><span class="v"></span></div>';
+    } else {
+      var r = calc(m, p);
+      if (r.error) {
+        azEl.textContent = '—'; elEl.textContent = '—';
+        azEl.className = 'val empty'; elEl.className = 'val empty';
+        azErr.textContent = r.error; elErr.textContent = r.error;
+        $('mid-grid').innerHTML = '<div class="mid"><span class="k">' + r.error + '</span><span class="v"></span></div>';
+      } else {
+        azEl.className = 'val'; elEl.className = 'val';
+        azEl.innerHTML = r.az.toFixed(5) + '<small>°</small>';
+        elEl.innerHTML = r.el.toFixed(5) + '<small>°</small>';
+        var html = '';
+        Object.keys(r.mid).forEach(function (k) {
+          html += '<div class="mid"><span class="k">' + k + '</span><span class="v">' + fmt(r.mid[k]) + '</span></div>';
+        });
+        $('mid-grid').innerHTML = html;
+        window._lastResult = { mode: m, p: p, az: r.az, el: r.el, dh: r.dh, dv: r.dv };
+      }
+    }
+    renderFormula();
+    saveStore();
+  }
+
+  function renderFormula() {
+    var box = $('formula-box');
+    if (state.mode === 'rect') {
+      box.innerHTML =
+        '<span class="f-az">AZ</span> = ATAN[ (P1+P2)/2 − (P3+P4)/2 ] ÷ 水平距离 ÷ π × 180<br>' +
+        '<span class="f-el">EL</span> = ATAN[ (P1+P4)/2 − (P2+P3)/2 ] ÷ 垂直距离 ÷ π × 180<br>' +
+        '<span style="color:#94a3b8">与 Excel 原公式一致（除以距离在 ATAN 之外，π=3.1415926）</span>';
+    } else {
+      box.innerHTML =
+        '<span class="f-az">AZ</span> = ATAN[ (P1−P3) ÷ 水平距离 ] ÷ π × 180<br>' +
+        '<span class="f-el">EL</span> = ATAN[ (P2−P4) ÷ 垂直距离 ] ÷ π × 180<br>' +
+        '<span style="color:#94a3b8">与 Excel 原公式一致（除以距离在 ATAN 之内，π=3.1415926）</span>';
+    }
+  }
+
+  function renderHistory() {
+    var tbody = $('history-body');
+    tbody.innerHTML = '';
+    $('history-empty').style.display = history.length ? 'none' : 'block';
+    $('history-table').style.display = history.length ? 'table' : 'none';
+    history.forEach(function (rec, i) {
+      var tr = document.createElement('tr');
+      var cells = [
+        rec.time,
+        '<span class="tag ' + rec.mode + '">' + (rec.mode === 'rect' ? '矩形' : '十字') + '</span>',
+        fmt(rec.p1), fmt(rec.p2), fmt(rec.p3), fmt(rec.p4),
+        fmt(rec.h, 1), fmt(rec.v, 1),
+        '<span class="azv">' + rec.az.toFixed(5) + '</span>',
+        '<span class="elv">' + rec.el.toFixed(5) + '</span>',
+        '<button class="del-btn" data-i="' + i + '" title="删除">✕</button>'
+      ];
+      tr.innerHTML = cells.map(function (c) { return '<td>' + c + '</td>'; }).join('');
+      tbody.appendChild(tr);
+    });
+  }
+
+  // ---------- 事件 ----------
+  function bindInputs() {
+    var all = [];
+    ['rect', 'cross'].forEach(function (m) {
+      Object.keys(INPUT_IDS[m]).forEach(function (k) { all.push($(INPUT_IDS[m][k])); });
+    });
+    all.push($('dist-h'), $('dist-v'));
+    all.forEach(function (el) {
+      el.addEventListener('input', render);
+    });
+  }
+
+  function switchMode(mode) {
+    state.mode = mode;
+    document.querySelectorAll('.tab').forEach(function (t) {
+      t.classList.toggle('active', t.dataset.mode === mode);
+    });
+    var isRect = mode === 'rect';
+    $('diagram-rect').style.display = isRect ? 'flex' : 'none';
+    $('diagram-cross').style.display = isRect ? 'none' : 'flex';
+    $('inputs-rect').style.display = isRect ? 'grid' : 'none';
+    $('inputs-cross').style.display = isRect ? 'none' : 'grid';
+    $('dist-h').value = state[mode].h;
+    $('dist-v').value = state[mode].v;
+    render();
+  }
+
+  function loadInputsToDOM() {
+    var m = state.mode;
+    Object.keys(INPUT_IDS.rect).forEach(function (k) { $('r-' + k).value = state.rect[k]; });
+    Object.keys(INPUT_IDS.cross).forEach(function (k) { $('c-' + k).value = state.cross[k]; });
+    $('dist-h').value = state[m].h;
+    $('dist-v').value = state[m].v;
+  }
+
+  $('tab-rect').addEventListener('click', function () { switchMode('rect'); });
+  $('tab-cross').addEventListener('click', function () { switchMode('cross'); });
+
+  $('btn-sample').addEventListener('click', function () {
+    var s = SAMPLES[state.mode], m = state.mode;
+    state[m].p1 = String(s.p1); state[m].p2 = String(s.p2);
+    state[m].p3 = String(s.p3); state[m].p4 = String(s.p4);
+    state[m].h = String(s.h); state[m].v = String(s.v);
+    Object.keys(INPUT_IDS[m]).forEach(function (k) { $(INPUT_IDS[m][k]).value = state[m][k]; });
+    $('dist-h').value = state[m].h;
+    $('dist-v').value = state[m].v;
+    render();
+    toast('已填入 Excel 示例数据');
+  });
+
+  $('btn-clear').addEventListener('click', function () {
+    var m = state.mode;
+    Object.keys(INPUT_IDS[m]).forEach(function (k) {
+      state[m][k] = '';
+      $(INPUT_IDS[m][k]).value = '';
+    });
+    render();
+    toast('已清空当前模式输入');
+  });
+
+  $('btn-save').addEventListener('click', function () {
+    var r = window._lastResult;
+    if (!r) { toast('请先输入完整的四个点位'); return; }
+    var now = new Date();
+    var pad = function (n) { return (n < 10 ? '0' : '') + n; };
+    var time = now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate()) +
+      ' ' + pad(now.getHours()) + ':' + pad(now.getMinutes()) + ':' + pad(now.getSeconds());
+    history.unshift({
+      time: time, mode: r.mode,
+      p1: r.p.p1, p2: r.p.p2, p3: r.p.p3, p4: r.p.p4,
+      h: r.p.h, v: r.p.v, az: r.az, el: r.el
+    });
+    saveHistory();
+    renderHistory();
+    toast('已保存到历史记录');
+  });
+
+  $('btn-copy').addEventListener('click', function () {
+    var r = window._lastResult;
+    if (!r) { toast('请先输入完整的四个点位'); return; }
+    var modeName = r.mode === 'rect' ? '矩形点位分布' : '十字分布';
+    var text = '打点计算结果（' + modeName + '）\n' +
+      'P1=' + fmt(r.p.p1) + ' mm, P2=' + fmt(r.p.p2) + ' mm, P3=' + fmt(r.p.p3) + ' mm, P4=' + fmt(r.p.p4) + ' mm\n' +
+      '水平距离=' + fmt(r.p.h, 1) + ' mm, 垂直距离=' + fmt(r.p.v, 1) + ' mm\n' +
+      'AZ = ' + r.az.toFixed(5) + '°\n' +
+      'EL = ' + r.el.toFixed(5) + '°';
+    copyText(text).then(function () { toast('结果已复制到剪贴板'); });
+  });
+
+  $('btn-export').addEventListener('click', function () {
+    if (!history.length) { toast('暂无历史记录'); return; }
+    var head = '时间,模式,P1(mm),P2(mm),P3(mm),P4(mm),水平距离(mm),垂直距离(mm),AZ(度),EL(度)';
+    var rows = history.map(function (r) {
+      return [r.time, r.mode === 'rect' ? '矩形' : '十字', r.p1, r.p2, r.p3, r.p4, r.h, r.v,
+        r.az.toFixed(5), r.el.toFixed(5)].join(',');
+    });
+    // BOM 保证 Excel 打开中文不乱码
+    var blob = new Blob(['\uFEFF' + head + '\n' + rows.join('\n')], { type: 'text/csv;charset=utf-8' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = '打点计算记录.csv';
+    a.click();
+    URL.revokeObjectURL(a.href);
+    toast('CSV 已导出');
+  });
+
+  $('btn-clear-history').addEventListener('click', function () {
+    if (!history.length) { toast('暂无历史记录'); return; }
+    if (confirm('确定清空全部历史记录吗？')) {
+      history = [];
+      saveHistory();
+      renderHistory();
+      toast('历史记录已清空');
+    }
+  });
+
+  $('history-body').addEventListener('click', function (e) {
+    var btn = e.target.closest('.del-btn');
+    if (!btn) return;
+    var i = parseInt(btn.dataset.i, 10);
+    history.splice(i, 1);
+    saveHistory();
+    renderHistory();
+  });
+
+  // ---------- 初始化 ----------
+  loadStore();
+  loadInputsToDOM();
+  bindInputs();
+  switchMode(state.mode);
+  renderHistory();
+})();
+</script>
+</body>
+</html>
